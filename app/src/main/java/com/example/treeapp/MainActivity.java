@@ -630,11 +630,11 @@ public class MainActivity extends AppCompatActivity {
         builder.setTitle("Chi tiết của " + treeName);
 
         // Inflate the custom dialog layout
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_tree_details, null);
+        View dialogView = getLayoutInflater().inflate(R.layout.activity_plant_details, null);
         builder.setView(dialogView);
 
-        TextView treeCodeTextView = dialogView.findViewById(R.id.tree_code);
-        treeCodeTextView.setText("Mã cây: " + treeCode);
+        TextView treeCodeTextView = dialogView.findViewById(R.id.tv_name);
+        treeCodeTextView.setText(treeName);
 
         // Other logic and views for showing the details...
 
