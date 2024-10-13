@@ -1,0 +1,55 @@
+<!-- res/layout/dialog_tree_details.xml -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Tree Code TextView with the correct ID -->
+    <TextView
+        android:id="@+id/tree_code"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tree Code"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:paddingBottom="8dp"/>
+
+    <!-- Other views for checkboxes, date picker, etc. -->
+    <CheckBox
+        android:id="@+id/checkbox_seedling"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Hạt giống"/>
+
+    <CheckBox
+        android:id="@+id/checkbox_sapling"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Cây non"/>
+
+    <CheckBox
+        android:id="@+id/checkbox_mature"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Trưởng thành"/>
+
+    <Button
+        android:id="@+id/button_date_picker"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Chọn ngày trồng cây"/>
+
+    <TextView
+        android:id="@+id/selected_date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Ngày đã chọn: "/>
+
+    <CheckBox
+        android:id="@+id/checkbox_today"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Hôm nay là ngày trồng cây"/>
+</LinearLayout>
