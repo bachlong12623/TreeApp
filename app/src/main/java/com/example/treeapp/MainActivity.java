@@ -9,6 +9,10 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.database.SQLException;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
@@ -68,8 +72,12 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.ParseException;
@@ -91,20 +99,14 @@ public class MainActivity extends AppCompatActivity {
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
     private FusedLocationProviderClient fusedLocationClient;
 
-    private String[] treeNames = {"Sầu riêng", "Cà phê", "Trà"};
-    private String[] treeCodes = {"T001", "T002", "T003"};
-    private String[] wikiLinks = {
-            "https://en.wikipedia.org/wiki/Oak",
-            "https://en.wikipedia.org/wiki/Pine",
-            "https://en.wikipedia.org/wiki/Maple"
-    };
-    private String[] otherLinks = {
-            "https://example.com/oak",
-            "https://example.com/pine",
-            "https://example.com/maple"
-    };
+    private String[] treeNames;
+    private String[] treeCodes;
+    private String[] wikiLinks;
+    private String[] otherLinks;
     private RecyclerView recyclerView;
     private TreeListAdapter treeListAdapter;
+    private DatabaseHelper dbHelper;
+
 
 
     @Override
@@ -125,6 +127,17 @@ public class MainActivity extends AppCompatActivity {
         } else {
             getLocation();
         }
+
+        dbHelper = new DatabaseHelper(this);
+        dbHelper.initializeDatabase();
+
+        // Open the database
+        dbHelper.openDatabase();
+
+//         Load data from the database and update the UI
+        loadDataFromDatabase();
+
+
         setSupportActionBar(binding.appBarMain.toolbar);
         binding.appBarMain.fab.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -137,14 +150,14 @@ public class MainActivity extends AppCompatActivity {
         NavigationView navigationView = binding.navView;
         // Passing each menu ID as a set of Ids because each
         // menu should be considered as top level destinations.
-        mAppBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
-                .setOpenableLayout(drawer)
-                .build();
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-        NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
-        NavigationUI.setupWithNavController(navigationView, navController);
-        // Set up RecyclerView
+//        mAppBarConfiguration = new AppBarConfiguration.Builder(
+//                R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
+//                .setOpenableLayout(drawer)
+//                .build();
+//        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
+//        NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
+//        NavigationUI.setupWithNavController(navigationView, navController);
+//        // Set up RecyclerView
         recyclerView = findViewById(R.id.recycler_view_trees);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         treeListAdapter = new TreeListAdapter(this, null); // Pass context and null data initially
@@ -154,6 +167,43 @@ public class MainActivity extends AppCompatActivity {
         loadTreeData();
     }
 
+    private void loadDataFromDatabase() {
+        // Get readable database
+        SQLiteDatabase db = dbHelper.getDatabase();
+
+        // Query to fetch the data
+        String query = "SELECT * FROM tree_read";
+        Cursor cursor = db.rawQuery(query, null);
+
+        // Initialize ArrayLists to store the data
+        List<String> treeNameList = new ArrayList<>();
+        List<String> treeCodeList = new ArrayList<>();
+        List<String> wikiLinkList = new ArrayList<>();
+        List<String> otherLinkList = new ArrayList<>();
+
+        // Loop through the results
+        if (cursor.moveToFirst()) {
+            do {
+                // Add data to ArrayLists
+                treeCodeList.add(cursor.getString(cursor.getColumnIndex("id"))); // treeCode
+                treeNameList.add(cursor.getString(cursor.getColumnIndex("name")));  // treeName
+                wikiLinkList.add(cursor.getString(cursor.getColumnIndex("link_info")));  // wikiLink
+                otherLinkList.add(cursor.getString(cursor.getColumnIndex("link_survey")));  // otherLink
+            } while (cursor.moveToNext());
+        }
+
+        // Close cursor and database
+        cursor.close();
+        db.close();
+
+        // Convert ArrayLists to arrays
+        treeNames = treeNameList.toArray(new String[0]);
+        treeCodes = treeCodeList.toArray(new String[0]);
+        wikiLinks = wikiLinkList.toArray(new String[0]);
+        otherLinks = otherLinkList.toArray(new String[0]);
+
+        // Now you can use the arrays (treeNames, treeCodes, wikiLinks, otherLinks)
+    }
     private void createNotificationChannel() {
         // Create the NotificationChannel, but only on API 26+ because
         // the NotificationChannel class is not in the Support Library.
@@ -590,6 +640,9 @@ public class MainActivity extends AppCompatActivity {
 
         @Query("SELECT * FROM tree_details")
         List<TreeDetails> getAllTreeDetails();
+
+        @Query("DELETE FROM tree_details WHERE tree_name = :treeName")
+        void deleteTreeDetailsByName(String treeName);
     }
     @Database(entities = {TreeDetails.class}, version = 1, exportSchema = false)
     public abstract static class AppDatabase extends RoomDatabase {
@@ -638,13 +691,21 @@ public class MainActivity extends AppCompatActivity {
 
         // Other logic and views for showing the details...
 
-        builder.setPositiveButton("Lưu", (dialog, which) -> {
-            // Save logic or other actions after selecting data
-            Toast.makeText(MainActivity.this, "Đã lưu dữ liệu cho " + treeName, Toast.LENGTH_SHORT).show();
+        builder.setPositiveButton("Xóa", (dialog, which) -> {
+            deleteTreeData(treeName);
+            Toast.makeText(MainActivity.this, "Đã xóa dữ liệu cho " + treeName, Toast.LENGTH_SHORT).show();
         });
 
         builder.setNegativeButton("Quay lại", null);
         builder.create().show();
+    }
+
+    private void deleteTreeData(String treeName) {
+        new Thread(() -> {
+            AppDatabase db = AppDatabase.getDatabase(MainActivity.this);
+            db.treeDetailsDao().deleteTreeDetailsByName(treeName);
+            runOnUiThread(this::loadTreeData);
+        }).start();
     }
 
     public static class TreeListAdapter extends RecyclerView.Adapter<TreeListAdapter.TreeViewHolder> {
@@ -701,6 +762,74 @@ public class MainActivity extends AppCompatActivity {
         public void setTreeList(List<TreeDetails> newTreeList) {
             this.treeList = newTreeList;
             notifyDataSetChanged();
+        }
+    }
+
+
+    public class DatabaseHelper extends SQLiteOpenHelper {
+
+        private static final String DATABASE_NAME = "treedata.db";
+        private static final String DATABASE_PATH = "/data/data/com.example.treeapp/databases/";
+        private static final int DATABASE_VERSION = 1;
+        private Context context;
+        private SQLiteDatabase database;
+
+        public DatabaseHelper(Context context) {
+            super(context, DATABASE_NAME, null, DATABASE_VERSION);
+            this.context = context;
+        }
+
+        // Check if the database exists
+        private boolean checkDatabase() {
+            File dbFile = new File(DATABASE_PATH + DATABASE_NAME);
+            return dbFile.exists();
+        }
+
+        // Copy the database from assets to the internal storage
+        private void copyDatabase() throws IOException {
+            InputStream input = context.getAssets().open(DATABASE_NAME);
+            String outFileName = DATABASE_PATH + DATABASE_NAME;
+            OutputStream output = new FileOutputStream(outFileName);
+
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = input.read(buffer)) > 0) {
+                output.write(buffer, 0, length);
+            }
+
+            output.flush();
+            output.close();
+            input.close();
+        }
+
+        public void openDatabase() throws SQLException {
+            String dbPath = DATABASE_PATH + DATABASE_NAME;
+            database = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY);
+        }
+
+        @Override
+        public void onCreate(SQLiteDatabase db) {
+            // No need to create tables if you're using a pre-existing database
+        }
+
+        @Override
+        public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+            // Handle database upgrade logic
+        }
+
+        public SQLiteDatabase getDatabase() {
+            return this.database;
+        }
+
+        public void initializeDatabase() {
+            if (checkDatabase()) {
+                try {
+                    this.getReadableDatabase(); // This will create the database folder
+                    copyDatabase();
+                } catch (IOException e) {
+                    throw new Error("Error copying database: " + e.getMessage());
+                }
+            }
         }
     }
 
