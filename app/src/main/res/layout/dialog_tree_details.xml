@@ -17,23 +17,6 @@
         android:paddingBottom="8dp"/>
 
     <!-- Other views for checkboxes, date picker, etc. -->
-    <CheckBox
-        android:id="@+id/checkbox_seedling"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Hạt giống"/>
-
-    <CheckBox
-        android:id="@+id/checkbox_sapling"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Cây non"/>
-
-    <CheckBox
-        android:id="@+id/checkbox_mature"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Trưởng thành"/>
 
     <Button
         android:id="@+id/button_date_picker"

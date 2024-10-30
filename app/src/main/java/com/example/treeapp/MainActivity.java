@@ -5,7 +5,6 @@ import android.app.DatePickerDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -20,15 +19,12 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.Menu;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
-import android.widget.DatePicker;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
 import androidx.annotation.NonNull;
@@ -84,6 +80,9 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -106,6 +105,9 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private TreeListAdapter treeListAdapter;
     private DatabaseHelper dbHelper;
+
+    // Create a lenient DateTimeFormatter that accepts single-digit days and months
+    DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("d/M/yyyy");
 
 
 
@@ -148,16 +150,7 @@ public class MainActivity extends AppCompatActivity {
         scheduleDailyRainfallCheck();
         DrawerLayout drawer = binding.drawerLayout;
         NavigationView navigationView = binding.navView;
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
-//        mAppBarConfiguration = new AppBarConfiguration.Builder(
-//                R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
-//                .setOpenableLayout(drawer)
-//                .build();
-//        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-//        NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
-//        NavigationUI.setupWithNavController(navigationView, navController);
-//        // Set up RecyclerView
+
         recyclerView = findViewById(R.id.recycler_view_trees);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         treeListAdapter = new TreeListAdapter(this, null); // Pass context and null data initially
@@ -194,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Close cursor and database
         cursor.close();
-        db.close();
+
 
         // Convert ArrayLists to arrays
         treeNames = treeNameList.toArray(new String[0]);
@@ -487,31 +480,9 @@ public class MainActivity extends AppCompatActivity {
                 CheckBox todayCheckBox = dialogView.findViewById(R.id.checkbox_today);
 
                 // Set up plant stages checkboxes
-                CheckBox seedlingCheckBox = dialogView.findViewById(R.id.checkbox_seedling);
-                CheckBox saplingCheckBox = dialogView.findViewById(R.id.checkbox_sapling);
-                CheckBox matureCheckBox = dialogView.findViewById(R.id.checkbox_mature);
 
-                // Logic to make only one checkbox selectable at a time
-                seedlingCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                    if (isChecked) {
-                        saplingCheckBox.setChecked(false);
-                        matureCheckBox.setChecked(false);
-                    }
-                });
 
-                saplingCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                    if (isChecked) {
-                        seedlingCheckBox.setChecked(false);
-                        matureCheckBox.setChecked(false);
-                    }
-                });
 
-                matureCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                    if (isChecked) {
-                        seedlingCheckBox.setChecked(false);
-                        saplingCheckBox.setChecked(false);
-                    }
-                });
 
                 // DatePicker logic
                 datePickerButton.setOnClickListener(v -> {
@@ -540,25 +511,47 @@ public class MainActivity extends AppCompatActivity {
 
                 // Show the dialog
                 builder.setPositiveButton("Lưu", (dialog, which) -> {
-                    String selectedDate = selectedDateTextView.getText().toString();
-                    String plantStage = seedlingCheckBox.isChecked() ? "Seedling"
-                            : saplingCheckBox.isChecked() ? "Sapling"
-                            : matureCheckBox.isChecked() ? "Mature" : "";
+                    String selectedDateText = selectedDateTextView.getText().toString();
 
                     // Create a TreeDetails object to store in the database
                     TreeDetails treeDetails = new TreeDetails();
                     treeDetails.treeName = treeName;
                     treeDetails.treeCode = treeCode;
-                    treeDetails.selectedDate = String.valueOf(todayCheckBox.isChecked() ? LocalDate.now() : LocalDate.parse(selectedDateTextView.getText().toString().replace("Ngày đã chọn: ", ""), DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-                    treeDetails.plantStage = plantStage;
 
-                    // Save data to Room database
-                    AppDatabase db = AppDatabase.getDatabase(MainActivity.this);
-                    new Thread(() -> {
-                        db.treeDetailsDao().insertTreeDetails(treeDetails);
-                    }).start();
+                    // Define a flexible date formatter
 
-                    Toast.makeText(MainActivity.this, "Đã lưu dữ liệu cho " + treeName, Toast.LENGTH_SHORT).show();
+
+                    try {
+                        String rawDateString = selectedDateText.replace("Ngày đã chọn: ", "");  // Remove the prefix
+
+                        // Log the raw date string for debugging
+                        Log.d("DEBUG", "Raw date string after replace: " + rawDateString);
+
+                        LocalDate parsedDate = todayCheckBox.isChecked()
+                                ? LocalDate.now()  // Get today's date
+                                : LocalDate.parse(rawDateString, dateFormatter);  // Parse selected date once
+
+                        // Format the date to the correct pattern
+                        String formattedDate = parsedDate.format(dateFormatter);
+
+                        // Log the formatted date for debugging
+                        Log.d("DEBUG", "Formatted Date: " + formattedDate);
+
+                        // Assign formatted date to treeDetails
+                        treeDetails.selectedDate = formattedDate;
+
+                        // Save data to Room database
+                        AppDatabase db = AppDatabase.getDatabase(MainActivity.this);
+                        new Thread(() -> {
+                            db.treeDetailsDao().insertTreeDetails(treeDetails);
+                        }).start();
+
+                        Toast.makeText(MainActivity.this, "Đã lưu dữ liệu cho " + treeName, Toast.LENGTH_SHORT).show();
+
+                    } catch (Exception e) {
+                        // Handle date parsing errors
+                        Toast.makeText(MainActivity.this, "Lỗi định dạng ngày: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
                 });
 
                 builder.setNegativeButton("Quay lại", null);
@@ -624,9 +617,6 @@ public class MainActivity extends AppCompatActivity {
 
         @ColumnInfo(name = "selected_date")
         public String selectedDate;
-
-        @ColumnInfo(name = "plant_stage")
-        public String plantStage;
     }
 
     @Dao
@@ -643,6 +633,8 @@ public class MainActivity extends AppCompatActivity {
 
         @Query("DELETE FROM tree_details WHERE tree_name = :treeName")
         void deleteTreeDetailsByName(String treeName);
+        @Query("DELETE FROM tree_details WHERE id = :id")
+        void deleteTreeDetailsById(int id);
     }
     @Database(entities = {TreeDetails.class}, version = 1, exportSchema = false)
     public abstract static class AppDatabase extends RoomDatabase {
@@ -676,34 +668,50 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // This function is now accessible from the TreeListAdapter to show the dialog
-    public void showTreeDetailsDialog(String treeName, String treeCode) {
-        // Your existing code for showing tree details dialog
+    public void showTreeDetailsDialog( TreeDetails tree) {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-        builder.setTitle("Chi tiết của " + treeName);
+        builder.setTitle("Chi tiết của " + tree.treeName);
+        SQLiteDatabase db = dbHelper.getDatabase();
+        LocalDate selectedDate = LocalDate.parse(tree.selectedDate, dateFormatter); // Parse using the formatter
+        // Query to fetch the data
+        String query_tree = "SELECT * FROM tree_read WHERE id = '" + tree.treeCode + "' LIMIT 1";
+        Cursor cursor = db.rawQuery(query_tree, null);
+        String querry_stage = "SELECT * FROM stage WHERE id = '" + tree.treeCode + "' ORDER BY growth_day DESC";
+        Cursor cursor_stage = db.rawQuery(querry_stage, null);
 
-        // Inflate the custom dialog layout
+
         View dialogView = getLayoutInflater().inflate(R.layout.activity_plant_details, null);
         builder.setView(dialogView);
-
+        if (cursor_stage.moveToFirst()) {
+            do {
+                // Count days till today
+                long diff = ChronoUnit.DAYS.between(selectedDate, LocalDate.now()); // Calculate the difference in days
+                int growth_day = Integer.parseInt(cursor_stage.getString(cursor_stage.getColumnIndex("growth_day")));
+                if (diff < growth_day) {
+                    TextView plantStatusTextView = dialogView.findViewById(R.id.tv_plant_status);
+                    plantStatusTextView.setText(cursor_stage.getString(cursor_stage.getColumnIndex("stage")));  // Set the desired status value here
+                }
+            } while (cursor_stage.moveToNext());
+        }
         TextView treeCodeTextView = dialogView.findViewById(R.id.tv_name);
-        treeCodeTextView.setText(treeName);
+        treeCodeTextView.setText(tree.treeName);
+        TextView selectedDateTextView = dialogView.findViewById(R.id.tv_start_date);
+        selectedDateTextView.setText(tree.selectedDate);
 
-        // Other logic and views for showing the details...
 
         builder.setPositiveButton("Xóa", (dialog, which) -> {
-            deleteTreeData(treeName);
-            Toast.makeText(MainActivity.this, "Đã xóa dữ liệu cho " + treeName, Toast.LENGTH_SHORT).show();
+            deleteTreeData(tree.id);
+            Toast.makeText(MainActivity.this, "Đã xóa dữ liệu cho " + tree.treeName, Toast.LENGTH_SHORT).show();
         });
 
         builder.setNegativeButton("Quay lại", null);
         builder.create().show();
     }
 
-    private void deleteTreeData(String treeName) {
+    private void deleteTreeData(int treeId) {
         new Thread(() -> {
             AppDatabase db = AppDatabase.getDatabase(MainActivity.this);
-            db.treeDetailsDao().deleteTreeDetailsByName(treeName);
+            db.treeDetailsDao().deleteTreeDetailsById(treeId);
             runOnUiThread(this::loadTreeData);
         }).start();
     }
@@ -730,12 +738,11 @@ public class MainActivity extends AppCompatActivity {
         public void onBindViewHolder(@NonNull TreeViewHolder holder, int position) {
             TreeDetails tree = treeList.get(position);
             holder.treeNameTextView.setText(tree.treeName);
-            holder.treeCodeTextView.setText(tree.treeCode);
 
             // Handle "More" button click to show tree details
             holder.moreButton.setOnClickListener(v -> {
                 if (context instanceof MainActivity) {
-                    ((MainActivity) context).showTreeDetailsDialog(tree.treeName, tree.treeCode);
+                    ((MainActivity) context).showTreeDetailsDialog(tree);
                 }
             });
         }
@@ -822,13 +829,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public void initializeDatabase() {
-            if (checkDatabase()) {
+//            if (!checkDatabase()) {
                 try {
                     this.getReadableDatabase(); // This will create the database folder
                     copyDatabase();
                 } catch (IOException e) {
                     throw new Error("Error copying database: " + e.getMessage());
-                }
+//                }
             }
         }
     }
