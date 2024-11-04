@@ -1,5 +1,7 @@
 package com.example.treeapp;
 
+import static android.content.ContentValues.TAG;
+
 import android.Manifest;
 import android.app.DatePickerDialog;
 import android.app.NotificationChannel;
@@ -16,6 +18,7 @@ import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -105,6 +108,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private TreeListAdapter treeListAdapter;
     private DatabaseHelper dbHelper;
+    WeatherData weatherData;
 
     // Create a lenient DateTimeFormatter that accepts single-digit days and months
     DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("d/M/yyyy");
@@ -215,8 +219,8 @@ public class MainActivity extends AppCompatActivity {
     public void scheduleDailyRainfallCheck() {
         // Calculate the initial delay to 6 AM
         Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.HOUR_OF_DAY, 20);
-        calendar.set(Calendar.MINUTE, 38);
+        calendar.set(Calendar.HOUR_OF_DAY, 6);
+        calendar.set(Calendar.MINUTE, 00);
         calendar.set(Calendar.SECOND, 0);
 
         long currentTime = System.currentTimeMillis();
@@ -227,8 +231,8 @@ public class MainActivity extends AppCompatActivity {
             targetTime += TimeUnit.DAYS.toMillis(1);
         }
 
-//        long initialDelay = targetTime - currentTime;
-        long initialDelay = 10000;
+        long initialDelay = targetTime - currentTime;
+//        long initialDelay = 10000;
         // Schedule the worker to repeat daily at 6 AM
         PeriodicWorkRequest workRequest = new PeriodicWorkRequest.Builder(
                 WaterPlantsWorker.class, 1, TimeUnit.DAYS)
@@ -303,7 +307,8 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     String response = stringBuilder.toString();
-                    parseWeatherData(response);
+                    weatherData = parseWeatherData(response);
+                    Log.d(TAG, "run: "+weatherData.highestTemperature);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -311,8 +316,25 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void parseWeatherData(String response) {
+    public class WeatherData {
+        public double totalRainfall;
+        public double highestTemperature;
+        public double lowestHumidity;
+
+        public WeatherData(double totalRainfall, double highestTemperature, double lowestHumidity) {
+            this.totalRainfall = totalRainfall;
+            this.highestTemperature = highestTemperature;
+            this.lowestHumidity = lowestHumidity;
+        }
+
+        public double getTotalRainfall() {
+            return totalRainfall;
+        }
+    }
+    private WeatherData parseWeatherData(String response) {
         double totalRainfall = 0; // Initialize total rainfall
+        double highestTemperature = Double.MIN_VALUE; // Initialize highest temperature
+        double lowestHumidity = Double.MAX_VALUE; // Initialize lowest humidity
 
         try {
             JSONObject jsonObject = new JSONObject(response);
@@ -325,24 +347,33 @@ public class MainActivity extends AppCompatActivity {
 
                 // Check if the date is within the next 5 days
                 if (isWithinNextFiveDays(dtTxt)) {
+                    JSONObject main = weatherObject.getJSONObject("main");
+                    double temp = main.getDouble("temp");
+                    int humidity = main.getInt("humidity");
+
+                    // Update highest temperature and lowest humidity
+                    if (temp > highestTemperature) {
+                        highestTemperature = temp;
+                    }
+                    if (humidity < lowestHumidity) {
+                        lowestHumidity = humidity;
+                    }
+
                     JSONObject rain = weatherObject.optJSONObject("rain");
                     if (rain != null) {
                         totalRainfall += rain.optDouble("3h", 0);
                     }
                 }
             }
-
-            Log.d("TotalRainfall", String.valueOf(totalRainfall));
-
-            // Store the total rainfall in SharedPreferences
             SharedPreferences sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE);
             SharedPreferences.Editor editor = sharedPreferences.edit();
             editor.putFloat("total_rainfall", (float) totalRainfall); // Store as float
             editor.apply();
-
         } catch (JSONException e) {
             e.printStackTrace();
         }
+
+        return new WeatherData(totalRainfall, highestTemperature, lowestHumidity);
     }
 
     // Method to check if the date is within the next 5 days
@@ -667,7 +698,35 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> treeListAdapter.setTreeList(treeList));
         }).start();
     }
+// Method to get diseases for the current stage
+private List<String> getDiseasesForCurrentStage(String treeCode, int growthDay) {
+    List<String> diseases = new ArrayList<>();
+    SQLiteDatabase db = dbHelper.getDatabase();
+    String query = "SELECT pademic FROM stage WHERE id = ? AND growth_day = ?";
+    Cursor cursor = db.rawQuery(query, new String[]{treeCode, String.valueOf(growthDay)});
+    if (cursor.moveToFirst()) {
+        do {
+            diseases.add(cursor.getString(cursor.getColumnIndex("pademic")));
+        } while (cursor.moveToNext());
+    }
+    cursor.close();
+    return diseases;
+}
 
+// Method to get all diseases for the tree
+private List<String> getAllDiseasesForTree(String treeCode) {
+    List<String> diseases = new ArrayList<>();
+    SQLiteDatabase db = dbHelper.getDatabase();
+    String query = "SELECT pademic FROM stage WHERE id = ?";
+    Cursor cursor = db.rawQuery(query, new String[]{treeCode});
+    if (cursor.moveToFirst()) {
+        do {
+            diseases.add(cursor.getString(cursor.getColumnIndex("pademic")));
+        } while (cursor.moveToNext());
+    }
+    cursor.close();
+    return diseases;
+}
     public void showTreeDetailsDialog( TreeDetails tree) {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setTitle("Chi tiết của " + tree.treeName);
@@ -679,7 +738,6 @@ public class MainActivity extends AppCompatActivity {
         String querry_stage = "SELECT * FROM stage WHERE id = '" + tree.treeCode + "' ORDER BY growth_day DESC";
         Cursor cursor_stage = db.rawQuery(querry_stage, null);
 
-
         View dialogView = getLayoutInflater().inflate(R.layout.activity_plant_details, null);
         builder.setView(dialogView);
         if (cursor_stage.moveToFirst()) {
@@ -690,6 +748,16 @@ public class MainActivity extends AppCompatActivity {
                 if (diff < growth_day) {
                     TextView plantStatusTextView = dialogView.findViewById(R.id.tv_plant_status);
                     plantStatusTextView.setText(cursor_stage.getString(cursor_stage.getColumnIndex("stage")));  // Set the desired status value here
+                    // Get diseases for the current stage
+                    List<String> diseases = getDiseasesForCurrentStage(tree.treeCode, growth_day);
+                    TextView commonDiseasesTextView = dialogView.findViewById(R.id.tv_common_diseases);
+                    if (!diseases.isEmpty()) {
+                        commonDiseasesTextView.setText(TextUtils.join(", ", diseases));
+                    } else {
+                        // If no diseases for the current stage, get all diseases for the tree
+                        diseases = getAllDiseasesForTree(tree.treeCode);
+                        commonDiseasesTextView.setText(TextUtils.join(", ", diseases));
+                    }
                 }
             } while (cursor_stage.moveToNext());
         }
@@ -697,7 +765,18 @@ public class MainActivity extends AppCompatActivity {
         treeCodeTextView.setText(tree.treeName);
         TextView selectedDateTextView = dialogView.findViewById(R.id.tv_start_date);
         selectedDateTextView.setText(tree.selectedDate);
+            // Update the temperature in tv_weather_conditions
+        TextView weatherConditionsTextView = dialogView.findViewById(R.id.tv_weather_conditions);
+            weatherConditionsTextView.setText("Nhiệt độ cao nhất: " + weatherData.highestTemperature + "°C");
 
+            // Show alert if humidity is below 29%
+            if (weatherData.lowestHumidity < 29) {
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Cảnh báo cháy rừng")
+                        .setMessage("Độ ẩm thấp dưới 29%, nguy cơ cháy rừng cao!")
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
 
         builder.setPositiveButton("Xóa", (dialog, which) -> {
             deleteTreeData(tree.id);
