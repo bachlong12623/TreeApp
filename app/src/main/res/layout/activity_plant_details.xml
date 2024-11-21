@@ -105,7 +105,7 @@
             android:id="@+id/btn_care_recommendation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Click here"
+            android:text="Bấm vào đây"
             android:textColor="@android:color/holo_blue_dark" />
 
         <!-- Dịch bệnh phổ biến -->
@@ -138,7 +138,7 @@
             android:id="@+id/btn_disease_treatment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Click here"
+            android:text="Bấm vào đây"
             android:textColor="@android:color/holo_blue_dark" />
 
     </LinearLayout>

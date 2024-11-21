@@ -253,12 +253,10 @@ public class MainActivity extends AppCompatActivity {
                         if (location != null) {
                             double latitude = location.getLatitude();
                             double longitude = location.getLongitude();
-                            Toast.makeText(MainActivity.this, "Location: " + latitude + ", " + longitude, Toast.LENGTH_SHORT).show();
-
                             // After getting the location, you can now fetch the weather information
                             getWeatherInformation(latitude, longitude);
                         } else {
-                            Toast.makeText(MainActivity.this, "Failed to get location.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(MainActivity.this, "Lấy vị trí thất bại.", Toast.LENGTH_SHORT).show();
                         }
                     }
                 });
@@ -393,7 +391,7 @@ public class MainActivity extends AppCompatActivity {
     // Method to show the dialog with tree list
     private void showTreeListDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-        builder.setTitle("Tree List");
+        builder.setTitle("Danh sách cây trồng");
 
         // Inflate custom layout for dialog content
         View customView = getLayoutInflater().inflate(R.layout.dialog_tree_list, null);
@@ -465,7 +463,7 @@ public class MainActivity extends AppCompatActivity {
                 treeNameTextView.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        showTreeDetailsDialog(treeName, treeCode);
+                        showTreeDetailsDialog(treeName, treeCode, wikiLink);
                     }
                 });
 
@@ -493,7 +491,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             // Method to show the second dialog with tree details
-            private void showTreeDetailsDialog(String treeName, String treeCode) {
+            private void showTreeDetailsDialog(String treeName, String treeCode, String wikiLink) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                 builder.setTitle("Chi tiết của " + treeName);
 
@@ -548,6 +546,7 @@ public class MainActivity extends AppCompatActivity {
                     TreeDetails treeDetails = new TreeDetails();
                     treeDetails.treeName = treeName;
                     treeDetails.treeCode = treeCode;
+                    treeDetails.wikiLink = wikiLink;
 
                     // Define a flexible date formatter
 
@@ -565,8 +564,6 @@ public class MainActivity extends AppCompatActivity {
                         // Format the date to the correct pattern
                         String formattedDate = parsedDate.format(dateFormatter);
 
-                        // Log the formatted date for debugging
-                        Log.d("DEBUG", "Formatted Date: " + formattedDate);
 
                         // Assign formatted date to treeDetails
                         treeDetails.selectedDate = formattedDate;
@@ -578,13 +575,13 @@ public class MainActivity extends AppCompatActivity {
                         }).start();
 
                         Toast.makeText(MainActivity.this, "Đã lưu dữ liệu cho " + treeName, Toast.LENGTH_SHORT).show();
+                        loadTreeData();
 
                     } catch (Exception e) {
                         // Handle date parsing errors
                         Toast.makeText(MainActivity.this, "Lỗi định dạng ngày: " + e.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 });
-
                 builder.setNegativeButton("Quay lại", null);
                 builder.create().show();
             }
@@ -648,6 +645,9 @@ public class MainActivity extends AppCompatActivity {
 
         @ColumnInfo(name = "selected_date")
         public String selectedDate;
+
+        @ColumnInfo(name = "link_info")
+        public String wikiLink;
     }
 
     @Dao
@@ -667,7 +667,7 @@ public class MainActivity extends AppCompatActivity {
         @Query("DELETE FROM tree_details WHERE id = :id")
         void deleteTreeDetailsById(int id);
     }
-    @Database(entities = {TreeDetails.class}, version = 1, exportSchema = false)
+    @Database(entities = {TreeDetails.class}, version = 2, exportSchema = false)
     public abstract static class AppDatabase extends RoomDatabase {
         public abstract TreeDetailsDao treeDetailsDao();
 
@@ -679,6 +679,7 @@ public class MainActivity extends AppCompatActivity {
                     if (INSTANCE == null) {
                         INSTANCE = Room.databaseBuilder(context.getApplicationContext(),
                                         AppDatabase.class, "tree_database")
+                                .fallbackToDestructiveMigration()
                                 .build();
                     }
                 }
@@ -778,6 +779,26 @@ private List<String> getAllDiseasesForTree(String treeCode) {
                         .show();
             }
 
+        Button btnCareRecommendation = dialogView.findViewById(R.id.btn_care_recommendation);
+        btnCareRecommendation.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String url = tree.wikiLink; // Replace with your actual URL ; // Replace with your actual URL
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse(url));
+                startActivity(intent);
+            }
+        });
+        Button btnMoreInfo = dialogView.findViewById(R.id.btn_disease_treatment);
+        btnMoreInfo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String url = tree.wikiLink; // Replace with your actual URL
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse(url));
+                startActivity(intent);
+            }
+        });
         builder.setPositiveButton("Xóa", (dialog, which) -> {
             deleteTreeData(tree.id);
             Toast.makeText(MainActivity.this, "Đã xóa dữ liệu cho " + tree.treeName, Toast.LENGTH_SHORT).show();
